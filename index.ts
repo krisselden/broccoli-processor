@@ -8,21 +8,32 @@ import {
   mapSeries,
   fs
 } from "./helpers";
+
 import SortedMap from "./sorted_map";
+
 import Graph, { Builder, InputFile, InputDir, OutputFile, OutputDir } from "./graph";
 
 export class SymlinkOrCopyBuilder extends Builder {
+  private lastTime: Date;
+  private lastSize: number;
+
   constructor(private input: InputFile, private output: OutputFile) {
     super();
     this.outputs = [ output ];
   }
 
-  create() {
+  build() {
+    this.lastTime = this.input.mtime;
+    this.lastSize = this.input.size;
     symlinkOrCopy.sync(this.input.fullPath, this.output.fullPath);
   }
 
-  remove() {
+  cleanup() {
     fs.unlinkSync(this.output.fullPath);
+  }
+
+  isValid() {
+    return this.input.size === this.lastSize && this.input.mtime === this.lastTime;
   }
 
   toString() {
@@ -31,17 +42,24 @@ export class SymlinkOrCopyBuilder extends Builder {
 }
 
 export class MakeDirectoryBuilder extends Builder {
+  private isBuilt: boolean;
+
   constructor(private output: OutputDir) {
     super();
     this.outputs = [ output ];
   }
 
-  create() {
+  build() {
     fs.mkdirSync(this.output.fullPath);
+    this.isBuilt = true;
   }
 
-  remove() {
+  cleanup() {
     fs.unlinkSync(this.output.fullPath);
+  }
+
+  isValid() {
+    return this.isBuilt;
   }
 
   toString() {

@@ -8,9 +8,9 @@
   },
   "typings": "dist/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "mocha dist/tests",
     "prepublish": "rm -rf dist && tsc -p tsconfig.json",
-    "watch": "tsc -p tsconfig.json --watch"
+    "watch": "rm -rf dist && tsc -p tsconfig.json --watch"
   },
   "author": "Kris Selden",
   "license": "MIT",
@@ -25,6 +25,8 @@
   },
   "devDependencies": {
     "broccoli": "^0.16.9",
+    "broccoli-test-helpers": "0.0.9",
+    "chai": "^3.5.0",
     "mocha": "^2.5.3",
     "tslint": "^3.11.0-dev.0",
     "typescript": "^1.9.0-dev.20160614-1.0"
