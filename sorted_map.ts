@@ -55,7 +55,7 @@ export default class SortedMap<K, V> {
     return i < 0;
   }
 
-  public set(key: K, value?: V) {
+  public set(key: K, value: V) {
     let i = binarySearch(this._keys, key);
     if (i < 0) {
       i = ~i;

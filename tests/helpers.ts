@@ -1,30 +1,90 @@
-export interface BuilderConstructor {
-  new (plugin: any): Builder;
+import SortedMap from "../sorted_map";
+
+declare function require(id: "tmp"): tmp.Module;
+declare function require(id: "fs"): fs.Module;
+declare function require(id: string): any;
+
+const tmp = require("tmp");
+const fs = require("fs");
+
+tmp.setGracefulCleanup();
+
+export function buildTree(entries: Entries): Tree {
+  let tree = new Tree();
+
+  try {
+    populateTree(tree.basePath, entries);
+  } catch (e) {
+    tree.dispose();
+    throw e;
+  }
+
+  return tree;
 }
 
-export interface BroccoliResult {
-  directory: string;
-  graph: BroccoliNode;
-  totalTime: number;
+export class Tree {
+  public basePath: string;
+
+  public entries = new SortedMap<string, null>();
+
+  private _removeCallback: () => void;
+
+  constructor() {
+    let tmpDir = tmp.dirSync({
+      prefix: "broccoli-fixture-",
+      unsafeCleanup: true
+    });
+    this.basePath = tmpDir.name;
+    this._removeCallback = tmpDir.removeCallback;
+  }
+
+  dispose(): void {
+    try {
+      this._removeCallback();
+    } catch (e) {}
+  }
+
+  removeFile(path: string): void {
+
+  }
+
+  addFile(path: string, contents: string): void {
+
+  }
 }
 
-export interface BroccoliNode {
-  id: number;
-  selfTime: number;
-  totalTime: number;
-  tree: any;
-  subtrees: BroccoliNode[];
-  parents: BroccoliNode[];
-  directory: string;
+export interface Entries {
+  [entry: string]: string | null;
 }
 
-export interface Builder {
-  build(): PromiseLike<BroccoliResult>;
-  cleanup(): PromiseLike<void>;
+function populateTree(rootDir: string, entries: Entries) {
+  for (let key in entries) {
+    let val = entries[key];
+    if (val === null) {
+      // dir
+    } else {
+      // file
+    }
+  }
 }
 
-declare function require(id: "broccoli"): {
-  Builder: BuilderConstructor;
-};
+namespace fs {
+  export interface Module {
+    writeFileSync(file: string, data: string): void;
+  }
+}
 
-export const { Builder } = require("broccoli");
+namespace tmp {
+  export interface Dir {
+    name: string;
+    removeCallback(): void;
+  }
+
+  export interface Module {
+    dirSync(options?: {
+      prefix?: string;
+      unsafeCleanup?: boolean;
+    }): Dir;
+    setGracefulCleanup(): void;
+  }
+}

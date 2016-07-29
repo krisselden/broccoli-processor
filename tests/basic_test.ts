@@ -1,17 +1,24 @@
-import { BroccoliProcessor } from "..";
+import { BroccoliProcessor } from "../index";
 import { walkSync } from "../helpers";
-import { Builder } from "./helpers";
+import { Builder } from "./builder";
 
 let subject: BroccoliProcessor;
 let builder: Builder;
 
 describe("basic", () => {
+  let tmpDir: tmp.Dir;
   beforeEach(() => {
-    subject = new BroccoliProcessor(["./tests/fixtures"], {});
+    tmpDir = tmp.dirSync({
+      prefix: "broccoli-processor-",
+      unsafeCleanup: true
+    });
+
+    subject = new BroccoliProcessor([tmpDir.name], {});
     builder = new Builder(subject);
   });
 
   afterEach(() => {
+    tmpDir.removeCallback();
     return builder.cleanup();
   });
 

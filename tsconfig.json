@@ -5,8 +5,11 @@
 		"target": "es5",
 		"outDir": "dist",
 		"sourceMap": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true
 	},
   "exclude": ["node_modules", "dist"],
-	"filesGlob": ["test/**/*.ts","lib/**/*.ts", "index.ts", "test.ts"]
+	"filesGlob": ["test/**/*.d.ts", "test/**/*.ts", "index.ts"]
 }

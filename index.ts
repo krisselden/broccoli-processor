@@ -99,19 +99,22 @@ export class BroccoliProcessor extends BroccoliPlugin {
     mapSeries(dirtySet.values(), (builder) => builder.build());
   }
 
-  private dispatchOp(op: FSTree.Op, entry: WalkSync.Entry): Builder[] {
+  private dispatchOp(op: FSTree.Op, entry: WalkSync.Entry): void {
     switch (op) {
       case "create":
-        return this.onInputFileCreated(this.graph.createInputFile(entry.relativePath, entry.basePath, entry.mode, entry.size, entry.mtime));
+        this.onInputFileCreated(this.graph.createInputFile(entry.relativePath, entry.basePath, entry.mode, entry.size, entry.mtime));
+        break;
       case "mkdir":
-        return this.onInputDirectoryCreated(this.graph.createInputDir(entry.relativePath, entry.basePath));
+        this.onInputDirectoryCreated(this.graph.createInputDir(entry.relativePath, entry.basePath));
+        break;
       case "unlink":
-        // return this.onInputFileRemoved(this.graph.crea(entry.relativePath, entry.basePath, entry.mode, entry.size, entry.mtime));
+        // this.onInputFileRemoved(this.graph.removeInputFile(entry.relativePath));
         break;
       case "change":
-        return this.onInputFileChanged(this.graph.updateInputFile(entry.relativePath, entry.basePath, entry.mode, entry.size, entry.mtime));
+        this.onInputFileChanged(this.graph.updateInputFile(entry.relativePath, entry.basePath, entry.mode, entry.size, entry.mtime));
+        break;
       case "rmdir":
-        // return this.onInputDirectoryRemoved();
+        // this.onInputDirectoryRemoved(this.graph.removeInputDirectory(entry.relativePath));
         break;
       default:
         throw Error(`unrecognized operation ${op} for entry ${entry.fullPath}`);
@@ -129,14 +132,9 @@ export class BroccoliProcessor extends BroccoliPlugin {
     let nextTree = FSTree.fromEntries(entryMap.values());
     this.currentTree = nextTree;
     let patch = currentTree.calculatePatch(nextTree);
-    let builders: Builder[] = [];
     patch.forEach(([op, relativePath, entry]) => {
-      let ouputs = this.dispatchOp(op, entry);
-      if (ouputs) {
-        ouputs.forEach(output => builders.push(output));
-      }
+      this.dispatchOp(op, entry);
     });
-    return builders;
   }
 
   protected addDepForOutput(builder: Builder, dep: Node) {
@@ -155,7 +153,7 @@ export class BroccoliProcessor extends BroccoliPlugin {
     // this.builders.set(id, builder);
     // this.addDepForOutput(builder, input);
     // return builder;
-    return;
+    throw new Error("unimplemented");
   }
 
   protected mkdir(relativeDirPath: string, dep: Node): Builder {
@@ -167,7 +165,7 @@ export class BroccoliProcessor extends BroccoliPlugin {
     // }
     // this.addDepForOutput(builder, dep);
     // return builder;
-    return;
+    throw new Error("unimplemented");
   }
 
   // protected buildersForInput(input: Input): Builder[] {
@@ -186,28 +184,28 @@ export class BroccoliProcessor extends BroccoliPlugin {
 
   protected onInputFileCreated(input: InputFile): Builder[] {
     console.log("created " + input);
-    return [this.symlinkOrCopy(input, input.relativePath)];
+    return [];
   }
 
   protected onInputFileChanged(input: InputFile): Builder[] {
     console.log("changed " + input);
     // return this.buildersForInput(input);
-    return;
+    return [];
   }
 
   protected onInputFileRemoved(input: InputFile): Builder[] {
     console.log("removed " + input);
     // return this.removeInput(input);
-    return;
+    return [];
   }
 
   protected onInputDirectoryCreated(input: InputDir): Builder[] {
     console.log("created " + input);
-    return; // [this.mkdir(input.relativePath, input)];
+    return []; // [this.mkdir(input.relativePath, input)];
   }
 
   protected onInputDirectoryRemoved(input: InputDir): Builder[] {
     console.log("removed " + input);
-    return;
+    return [];
   }
 }

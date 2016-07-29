@@ -6,7 +6,9 @@ export const OutputNodeType: NodeType = ">";
 
 export abstract class Node {
   public fullPath: string;
-  public builder: Builder = undefined;
+
+  inEdge: Edge | undefined;
+  outEdges: Edge[] | undefined;
 
   constructor(
     public id: string,
@@ -14,6 +16,14 @@ export abstract class Node {
     public relativePath: string,
     public basePath: string) {
     this.fullPath = basePath + "/" + relativePath;
+  }
+
+  public addOutEdge(edge: Edge) {
+    if (this.outEdges === undefined) {
+      this.outEdges = [edge];
+    } else {
+      this.outEdges.push(edge);
+    }
   }
 
   public abstract isDirectory(): boolean;
@@ -24,20 +34,23 @@ export abstract class Node {
 }
 
 export abstract class Input extends Node {
+  inEdge: undefined = undefined;
+
   constructor(id: string, relativePath: string, basePath: string) {
     super(id, InputNodeType, relativePath, basePath);
   }
 }
 
 export abstract class Output extends Node {
-  public builder: Builder;
+  public inEdge: Edge;
 
-  constructor(id: string, relativePath: string, basePath: string) {
+  constructor(id: string, relativePath: string, basePath: string, inEdge: Edge) {
     super(id, OutputNodeType, relativePath, basePath);
+    this.inEdge = inEdge;
   }
 
   public revalidate() {
-    return this.builder.revalidate();
+    return this.inEdge.revalidate();
   }
 }
 
@@ -77,32 +90,27 @@ function removeTrailingSlash(path: string): string {
   return ~path.lastIndexOf("/", end) ? path : path.slice(0, end);
 }
 
-let builderId = 0;
-export abstract class Builder {
-  deps = new SortedMap<string, Node>();
-  outputs: Output[];
+let edgeId = 0;
 
-  /**
-   * Allows the builders to be uniqued to run once per build since builders
-   * can build more than one output (e.g. transformed js and a source map)
-   * or have multiple deps that cause them to run (e.g. mkdir).
-   */
-  public id: number;
+export abstract class Edge {
+  public inputs: Node[];
+  public outputs: Output[];
 
-  constructor() {
-    this.id = ++builderId;
+  public id = ++edgeId;
+
+  addInput(input: Node) {
+    this.inputs.push(input);
   }
 
-  addDep(input: Node) {
-    this.deps.set(input.id, input);
-  }
-
-  removeDep(input: Node) {
-    this.deps.delete(input.id);
+  removeInput(input: Node) {
+    let i = this.inputs.indexOf(input);
+    if (i !== -1) {
+      this.inputs.splice(i, 1);
+    }
   }
 
   revalidate(): PromiseLike<any> | any {
-    if (this.deps.size) {
+    if (this.inputs.length) {
       if (this.isValid()) {
         return this.build();
       }
@@ -112,7 +120,9 @@ export abstract class Builder {
   }
 
   abstract isValid(): boolean;
+
   abstract build(): PromiseLike<any> | any;
+
   abstract cleanup(): PromiseLike<any> | any;
 }
 
@@ -132,28 +142,41 @@ function isOutputDir(node: Node): node is OutputDir {
   return node.type === OutputNodeType && !node.isDirectory();
 }
 
+function basename(path: string): string | undefined {
+  return;
+}
+
 export default class Graph {
-  // current map of active nodes.
-  private current = new SortedMap<string, Node>();
+  private inputs = new SortedMap<string, Input>();
+  private outputs = new SortedMap<string, Output>();
+  private removed = new SortedMap<string, Output>();
 
-  // private removed = new SortedMap<string, Node>();
-
-  /**
-   * Maps node id the builders it should run again.
-   * This can be an output id or input id.
-   */
-  private deps = new SortedMap<string, Builder[]>();
-
-  /**
-   * Maps output id to its Builder.
-   */
-  private output = new SortedMap<string, Builder>();
+  private dirty = new SortedMap<number, Edge>();
 
   constructor(private outputPath: string) {
   }
 
-  // removed
-  // builders
+  public createOutputFile(relativePath: string, inEdge: Edge): void {
+    let id = outputId(relativePath);
+    let output = this.outputs.get(id);
+    if (output) {
+      throw new Error(`Output already exists: ${output}`);
+    }
+    let outputDir = this.createOutputDir("");
+  }
+
+  public ensureParentDir(output: Output) {
+    let parentPath = basename(output.relativePath);
+    if (parentPath !== undefined) {
+      let parentDir = this.createOutputDir(parentPath);
+      output.inEdge.inputs.forEach(input => input.outEdges.push(parentDir.inEdge));
+    }
+  }
+
+  public createOutputDir(relativePath: string): OutputDir {
+    throw new Error();
+  }
+
 
   public createInputFile(relativePath: string,
                          basePath: string,
@@ -161,7 +184,7 @@ export default class Graph {
                          size: number,
                          mtime: Date): InputFile {
     let id = inputId(relativePath);
-    let node = this.current.get(id);
+    let node = this.inputs.get(id);
     if (node) {
       throw new Error(`Existing node ${node} is not an input file.`);
     }
@@ -174,7 +197,7 @@ export default class Graph {
                          size: number,
                          mtime: Date): InputFile {
     let id = inputId(relativePath);
-    let node = this.current.get(id);
+    let node = this.inputs.get(id);
     if (!node) {
       throw new Error(`Node does not exists for ${relativePath}`);
     }
@@ -188,59 +211,65 @@ export default class Graph {
     throw new Error(`Existing node ${node} is not an input file.`);
   }
 
-  public createInputDir(relativePath, basePath): InputDir {
+  public createInputDir(relativePath: string, basePath: string): InputDir {
     let id = inputId(relativePath);
-    let node = this.current.get(id);
+    let node = this.inputs.get(id);
     if (node) {
       throw new Error(`Node already exists ${node}`);
     }
     return new InputDir(id, relativePath, basePath);
   }
 
-  public getInputDir(relativePath): InputDir {
+  public getInputDir(relativePath: string): InputDir | undefined {
     let id = inputId(relativePath);
-    let node = this.current.get(id);
+    let node = this.inputs.get(id);
+    if (!node) {
+      return;
+    }
     if (isInputDir(node)) {
       return node;
     }
     throw new Error(`Existing node ${node} is not an input dir.`);
   }
 
-  // TODO clean relativePath, it does not come from walkSync
-  // needs posix slashes and no leading slash
-  public createOutputFile(relativePath): OutputFile {
-    let id = outputId(relativePath);
-    let node = this.current.get(id);
-    if (node) {
-      throw new Error(`Node already exists ${node}`);
-    }
-    return new OutputFile(id, relativePath, this.outputPath);
-  }
-
-  // public getOutputFile(relativePath): OutputFile {
+  // // TODO clean relativePath, it does not come from walkSync
+  // // needs posix slashes and no leading slash
+  // public createOutputFile(relativePath: string): OutputFile {
   //   let id = outputId(relativePath);
-  //   let node = this.current.get(id);
-  //   if (isOutputFile(node)) {
-  //     return node;
+  //   let node = this.inputs.get(id);
+  //   if (node) {
+  //     throw new Error(`Node already exists ${node}`);
   //   }
-  //   throw new Error(`Existing node ${node} is not an output file.`);
+  //   return new OutputFile(id, relativePath, this.outputPath);
   // }
 
-  public createOutputDir(relativePath): OutputDir {
-    let id = outputId(relativePath);
-    let node = this.current.get(id);
-    if (node) {
-      throw new Error(`Node already exists ${node}`);
-    }
-    return new OutputDir(id, relativePath, this.outputPath);
-  }
+  // // public getOutputFile(relativePath): OutputFile {
+  // //   let id = outputId(relativePath);
+  // //   let node = this.current.get(id);
+  // //   if (isOutputFile(node)) {
+  // //     return node;
+  // //   }
+  // //   throw new Error(`Existing node ${node} is not an output file.`);
+  // // }
 
-  public getOutputDir(relativePath): OutputDir {
-    let id = outputId(relativePath);
-    let node = this.current.get(id);
-    if (isOutputDir(node)) {
-      return node;
-    }
-    throw new Error(`Existing node ${node} is not an output dir.`);
-  }
+  // public createOutputDir(relativePath: string): OutputDir {
+  //   let id = outputId(relativePath);
+  //   let node = this.inputs.get(id);
+  //   if (node) {
+  //     throw new Error(`Node already exists ${node}`);
+  //   }
+  //   return new OutputDir(id, relativePath, this.outputPath);
+  // }
+
+  // public getOutputDir(relativePath: string): OutputDir | undefined {
+  //   let id = outputId(relativePath);
+  //   let node = this.inputs.get(id);
+  //   if (!node) {
+  //     return;
+  //   }
+  //   if (isOutputDir(node)) {
+  //     return node;
+  //   }
+  //   throw new Error(`Existing node ${node} is not an output dir.`);
+  // }
 }
